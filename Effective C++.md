@@ -1,5 +1,5 @@
 # Effective C++
-## 第一章：让自己习惯C++
+## 第一章 让自己习惯C++
 ### 01 视C++为一个语言联邦
 1. C++是个多重范型编程语言：
     1. 过程形式(procedural):侧重于通过一系列的过程（即函数或例行程序）来解决问题，一种线性的编程方法，其中数据通常作为参数传递给函数，而函数则对这些数据进行处理。
@@ -94,7 +94,7 @@ Directotry& tempDir(){   //这个函数用来替换tempDir对象，他在Directo
 + 构造函数最好使用初始化列表，而不要在本体内使用赋值操作，成员初始列中的成员变量其排列次序应该和它们在class中的声明次序相同。
 + 为免除“跨编译单元之初始化次序”问题，请以 local static 对象替换 non_local static 对象。
 
-## 第二章：构造/析构/赋值运算
+## 第二章 构造/析构/赋值运算
 ### 05 了解C++自动生成和调用的函数。
 
 **总结：**
@@ -306,7 +306,7 @@ Widget& Widget::operator=(const Widget& rhs){
 + 不要尝试用一个拷贝构造函数调用另一个拷贝构造函数，如果想要精简代码的话，应该把所有的功能机能放到第三个函数里面，并且由两个拷贝构造函数共同调用
 + 当新增加一个变量或者继承一个类的时候，很容易出现忘记拷贝构造的情况，所以每增加一个变量都需要在拷贝构造里面修改对应的方法
 
-## 第三章：资源管理
+## 第三章 资源管理
 ### 13 以对象管理资源
 
 主要是为了防止在delete语句执行前return，所以需要用对象来管理这些资源。这样当控制流离开f以后，该对象的析构函数会自动释放那些资源。
@@ -393,7 +393,7 @@ processWidget(pw, priority());
 **总结：**
 + 凡是有new语句的，尽量放在单独的语句当中，特别是当使用new出来的对象放到智能指针里面的时候
 
-## 四、设计与声明
+## 第四章 设计与声明
 ### 18 让接口容易被正确使用，不易被误用
 
 要思考用户有可能做出什么样子的错误，考虑下面的代码：
@@ -589,7 +589,7 @@ namespace WidgetStuff{
 + 调用swap时应该针对std::swap使用using std::swap声明，然后调用swap并且不带任何命名空间修饰符
 + 不要再std内加对于std而言是全新的东西（不符合C++标准）
 
-## 五、实现 (Implementations)
+## 第五章 实现 (Implementations)
 ### 26 尽可能延后变量定义式的出现时间
 
 主要是防止变量在定义以后没有使用，影响效率，应该在用到的时候再定义，同时通过default构造而不是赋值来初始化。
@@ -813,3 +813,73 @@ void MyClass::doSomething() { pimpl->doSomething(); }
 + 应该让文件依赖于声明而不依赖于定义，可以通过上面两种方法实现
 + 程序头文件应该有且仅有声明
 
+## 第六章 继承和面向对象设计
+
+### 32 确定你的public继承塑模出is-a关系
+
+public类继承指的是单向的更一般化的，例如：
+```cpp
+class Student : public Person{...};
+```
+其意义指的是student是一个person，但是person不一定是一个student。
+
+这里经常会出的错误是，将父类可能不存在的功能实现出来，例如：
+```cpp    
+class Bird{
+    virtual void fly();
+}
+class Penguin:public Bird{...};//企鹅是不会飞的
+```
+这个时候就需要通过设计来排除这种错误，例如通过定义一个FlyBird
+
+总结：
++ "public继承"意味着 is-a。适用于base classed 身上的每一件事情一定也适用于derived classes 身上，因为每一个 derived class对象也都是一个 base class 对象。
++ 公开继承下，满足父类的地方，一定满足子类，反之满足子类的地方不一定满足父类。
+
+### 33  避免遮掩继承而来的名称
+
+举例：
+```cpp
+class Base{
+    public:
+    virtual void mf1() = 0;
+    virtual void mf1(int);
+    virtual void mf2();
+    void         mf3();
+    void         mf3(double);
+}
+class Derived:public Base{
+    public:
+    virtual void mf1();
+    void         mf3();
+}
+```
+这种问题可以通过 
+```cpp
+using Base::mf1;
+
+或者
+virtual void mf1(){//转交函数
+    Base::mf1();
+}
+```
+    来解决，但是尽量不要出现这种遮蔽的行为
+
+总结：
++ 派生类内的名称会遮掩base classes 内的名称。
++ 可以通过using 或者转交函数来解决。
+
+### 34 区分接口继承和实现继承
+
+pure virtual 函数式提供了一个接口继承，当一个函数式pure virtual的时候，意味着所有的实现都在子类里面实现。不过pure virtual也是可以有实现的，调用他的实现的方法是在调用前加上基类的名称：
+```cpp
+    class Shape{
+        virtual void draw() const = 0;
+    }
+    ps->Shape::draw();
+```
+总结：
++ 接口继承和实现继承不同，在public继承下，derived classes总是继承base的接口
++ pure virtual函数只具体指定接口继承
++ 简朴的（非纯）impure virtual函数具体指定接口继承以及缺省实现继承
++ non-virtual函数具体指定接口继承以及强制性的实现继承
