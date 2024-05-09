@@ -588,3 +588,228 @@ namespace WidgetStuff{
 + 如果提供了一个member swap，也应该提供一个non-member swap调用前者，对于classes（而不是templates），需要特例化一个std::swap
 + 调用swap时应该针对std::swap使用using std::swap声明，然后调用swap并且不带任何命名空间修饰符
 + 不要再std内加对于std而言是全新的东西（不符合C++标准）
+
+## 五、实现 (Implementations)
+### 26 尽可能延后变量定义式的出现时间
+
+主要是防止变量在定义以后没有使用，影响效率，应该在用到的时候再定义，同时通过default构造而不是赋值来初始化。
+
+对于循环，将变量定义在循环外好还是循环内好？
+循环外：1个构造函数 + 1个析构函数 + n个赋值操作
+循环内：n个构造函数 + n个析构函数
+当一组赋值操作开销低于一组构造函数和一组析构函数时，使用循环外好，否则循环内。
+考虑前者作用域比后者大，除非效率高度敏感，否则选择循环内。
+
+**总结：**
++ 尽可能延后变量表达式的出现。这样做可增加程序的清晰度并改善程序效率。
+
+### 27 尽量不要进行强制类型转换
+
+1. 主要是因为：
+   1. 从int转向double容易出现精度错误
+   2. 将一个类转换成他的父类也容易出现问题
+
+2. 旧式转型：
+   1. (T) expression
+   2. T(expression)
+
+3. 新式转型：
+   1. const_cast:用于去除或添加常量性。需要注意的是，使用const_cast去除const属性后，修改原本应该是const的对象的值是未定义行为。
+   2. dynamic_cast:用于在类层次结构中进行安全的向下转型（即从基类指针或引用转换为派生类指针或引用）。它会检查转换是否有效，如果无效则返回空指针（对于指针类型）或引发异常（对于引用类型）。需要注意的是，dynamic_cast只能用于含有虚函数的类。
+   3. reinterpret_cast:用于不同类型之间的低级强制转换，它将源类型的二进制表示直接解释为目标类型。这种转换通常用于处理指针和整数之间的转换，但需要谨慎使用，因为它可能导致未定义行为。
+   4. static_cast:用于在相关类型之间进行转换，如非const转换为const、void指针转换为其他类型指针、基本数据类型之间的转换等。需要注意的是，它不能用于不兼容类型之间的转换。
+
+**总结：**
++ 尽量避免转型，特别是在注重效率的代码中避免dynamic_cast，试着用无需转型的替代设计
++ 如果转型是必要的，试着将他封装到韩束背后，让用户调用该函数，而不需要在自己的代码里面转型
++ 如果需要转型，使用新式的static_cast等转型，比原来的（int）好很多（更明显，分工更精确）
+
+### 28 避免返回handles指向对象内部成分
+```cpp
+修改前代码：
+class Rectangle{
+    public:
+    Point& upperLeft() const { return pData->ulhc; }
+    Point& lowerRight() const { return pData->lrhc; }
+}
+如果修改成：
+class Rectangle{
+    public:
+    const Point& upperLeft() const { return pData->ulhc; }
+    const Point& lowerRight() const { return pData->lrhc; }
+}
+则仍然会出现悬吊的变量，例如：
+const Point* pUpperLeft = &(boundingBox(*pgo).upperLeft());
+boundingBox会返回一个temp的新的，暂时的Rectangle对象，在这一整行语句执行完以后，temp就变成空的了，就成了悬吊的变量
+```
+
+**总结：**
++ 尽量不要返回指向private变量的指针引用等
++ 如果真的要用，尽量使用const进行限制，同时尽量避免悬吊的可能性
+
+### 29. 为“异常安全”而努力是值得的
+
+异常安全函数具有以下三个特征之一：
++ 如果异常被抛出，程序内的任何事物仍然保持在有效状态下，没有任何对象或者数据结构被损坏，前后一致。在任何情况下都不泄露资源，在任何情况下都不允许破坏数据，一个比较典型的反例：
++ 如果异常被抛出，则程序的状态不被改变，程序会回到调用函数前的状态
++ 承诺绝不抛出异常
+```cpp
+原函数：
+class PrettyMenu{
+    public:
+    void changeBackground(std::istream& imgSrc); //改变背景图像
+    private:
+    Mutex mutex; // 互斥器
+};
+
+void changeBackground(std::istream& imgSrc){
+    lock(&mutex);               //取得互斥器
+    delete bgImage;             //摆脱旧的背景图像
+    ++imageChanges;             //修改图像的变更次数
+    bgImage = new Image(imgSrc);//安装新的背景图像
+    unlock(&mutex);             //释放互斥器
+}
+```
+当异常抛出的时候，这个函数就存在很大的问题：
++ 不泄露任何资源：当new Image(imgSrc)发生异常的时候，对unlock的调用就绝不会执行，于是互斥器就永远被把持住了
++ 不允许数据破坏：如果new Image(imgSrc)发生异常，bgImage就是空的，而且imageChanges也已经加上了
+```cpp 
+修改后代码：
+void PrettyMenu::changeBackground(std::istream& imgSrc){
+    Lock ml(&mutex);    //Lock是第13条中提到的用对象管理资源的类
+    bgImage.reset(new Image(imgSrc));
+    ++imageChanges; //放在后面
+}
+```
+
+时间不断前进，我们与时俱进！
+
+**总结：**
++ 异常安全函数的三个特征
++ 第二个特征往往能够通过copy-and-swap实现出来，但是并非对所有函数都可实现或具备现实意义
++ 函数提供的异常安全保证，通常最高只等于其所调用各个函数的“异常安全保证”中最弱的那个。即函数的异常安全保证具有连带性
+                  
+### 30. 透彻了解inlining的里里外外
+
+inline 函数的过度使用会让程序的体积变大，内存占用过高
+
+而编译器是可以拒绝将函数inline的，不过当编译器不知道该调用哪个函数的时候，会报一个warning
+
+尽量不要为template或者构造函数设置成inline的，因为template inline以后有可能为每一个模板都生成对应的函数，从而让代码过于臃肿
+同样的道理，构造函数在实际的过程中也会产生很多的代码，例如下面的：
+```cpp
+    class Derived : public Base{
+        public:
+        Derived(){} // 看起来是空白的构造函数
+    }
+    实际上：
+    Derived::Derived{
+        //100行异常处理代码
+    }
+```
+
+**总结：**
++ 将大多数inlining限制在小型、被频繁调用的函数身上，这可使日后的调试过程和二进制升级(binary upgradability)更容易，也可使潜在的代码膨胀问题最小化，使程序的速度提升机会最大化。
++ 不要只是因为function templates出现在头文件，就将它们声明为inline 
+
+### 31. 将文件间的编译依存关系降至最低
+
+这个关系其实指的是一个文件包含另外一个文件的类定义等
+
+那么如何实现解耦呢,通常是将实现定义到另外一个类里面，如下：
+```cpp
+原代码：
+class Person{
+private
+    Dates m_data;
+    Addresses m_addr;
+}
+
+添加一个Person的实现类，定义为PersonImpl，修改后的代码：
+class PersonImpl;
+class Person{
+private:
+    shared_ptr<PersonImpl> pImpl;
+}
+```
+在上面的设计下,就实现了解耦，即“实现和接口分离”
+
+与此相似的接口类还可以使用全虚函数
+```cpp
+class Person{
+    public:
+    virtual ~Person();
+    virtual std::string name() const = 0;
+    virtual std::string birthDate() const = 0;
+}
+```
+然后通过继承的子类来实现相关的方法
+
+这种情况下这些virtual函数通常被成为factory工厂函数
+
+1. 使用前向声明：在需要使用某个类的对象指针或引用时，可以使用前向声明来避免包含整个类的头文件。例如，如果有一个类A，需要在类B中使用A的对象指针，可以在B的头文件中使用前向声明：
+  
+2. 减少头文件的包含：尽量避免在头文件中包含不必要的头文件，特别是那些可能导致大量代码被包含的头文件，如、等。可以将这些头文件的包含放到源文件中，以减少编译时间。
+
+3. 使用#pragma once：在头文件的开头使用#pragma once指令，可以避免头文件被重复包含，从而减少编译时间。但这种方法可能不适用于所有编译器，因此建议优先使用#ifndef/#define/#endif方法来防止头文件重复包含。
+
+4. 将实现细节放在源文件中：尽量将类的实现细节（如成员函数的实现）放在源文件中，而不是在头文件中。这样可以减少头文件的大小，降低编译时间。
+
+5. 使用Pimpl技巧：对于复杂的类，可以使用Pimpl（Pointer to Implementation）技巧将一个类的实现细节封装在一个私有的派生类中，并通过一个指向该派生类的指针来访问这些实现细节。从而减少头文件的依赖关系。这样可以提高代码的可维护性和可读性。
+
+Pimpl例子：
+```cpp
+// MyClass.h
+class MyClass {
+public:
+    MyClass();
+    ~MyClass();
+    void doSomething();
+
+private:
+    class Impl; // 前向声明
+    Impl* pimpl; // 指向实现的指针
+};
+
+// MyClass.cpp
+#include "MyClass.h"
+#include <iostream>
+
+class MyClass::Impl {
+public:
+    Impl() {
+        std::cout << "Impl constructor" << std::endl;
+    }
+
+    ~Impl() {
+        std::cout << "Impl destructor" << std::endl;
+    }
+
+    void doSomething() {
+        std::cout << "Impl doSomething" << std::endl;
+    }
+};
+
+MyClass::MyClass() : pimpl(new Impl()) {}
+MyClass::~MyClass() { delete pimpl; }
+void MyClass::doSomething() { pimpl->doSomething(); }
+
+上述代码展示了一个简单的使用Pimpl的例子。
+
+首先，在头文件MyClass.h中定义了一个名为MyClass的类。这个类有一个私有的派生类Impl，用于封装实现细节。同时，MyClass还包含一个指向Impl的指针pimpl，用于访问这些实现细节。
+
+接下来，在源文件MyClass.cpp中实现了MyClass和Impl类。Impl类包含了一些成员函数，如构造函数、析构函数和doSomething()函数。这些函数的具体实现可以根据需要进行修改。
+
+在MyClass的构造函数中，通过new操作符创建了一个Impl对象，并将其地址赋给pimpl指针。这样，MyClass就可以通过pimpl指针来访问Impl类的实现细节。
+
+同样地，在MyClass的析构函数中，通过delete操作符释放了pimpl指针所指向的Impl对象。
+
+最后，在MyClass的成员函数doSomething()中，通过调用pimpl->doSomething()来执行Impl类中的相应操作。
+
+通过使用Pimpl技巧，将实现细节封装在私有派生类中，可以降低头文件之间的依赖关系，提高代码的可维护性和可读性。
+```
+
+总结：
++ 应该让文件依赖于声明而不依赖于定义，可以通过上面两种方法实现
++ 程序头文件应该有且仅有声明
+
