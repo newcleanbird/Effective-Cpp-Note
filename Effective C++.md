@@ -809,7 +809,7 @@ void MyClass::doSomething() { pimpl->doSomething(); }
 通过使用Pimpl技巧，将实现细节封装在私有派生类中，可以降低头文件之间的依赖关系，提高代码的可维护性和可读性。
 ```
 
-总结：
+**总结：**
 + 应该让文件依赖于声明而不依赖于定义，可以通过上面两种方法实现
 + 程序头文件应该有且仅有声明
 
@@ -832,7 +832,7 @@ class Penguin:public Bird{...};//企鹅是不会飞的
 ```
 这个时候就需要通过设计来排除这种错误，例如通过定义一个FlyBird
 
-总结：
+**总结：**
 + "public继承"意味着 is-a。适用于base classed 身上的每一件事情一定也适用于derived classes 身上，因为每一个 derived class对象也都是一个 base class 对象。
 + 公开继承下，满足父类的地方，一定满足子类，反之满足子类的地方不一定满足父类。
 
@@ -865,21 +865,350 @@ virtual void mf1(){//转交函数
 ```
     来解决，但是尽量不要出现这种遮蔽的行为
 
-总结：
+**总结：**
 + 派生类内的名称会遮掩base classes 内的名称。
 + 可以通过using 或者转交函数来解决。
 
 ### 34 区分接口继承和实现继承
 
-pure virtual 函数式提供了一个接口继承，当一个函数式pure virtual的时候，意味着所有的实现都在子类里面实现。不过pure virtual也是可以有实现的，调用他的实现的方法是在调用前加上基类的名称：
-```cpp
-    class Shape{
-        virtual void draw() const = 0;
-    }
-    ps->Shape::draw();
-```
-总结：
+1. **所谓接口继承，就是派生类只继承函数的接口，也就是声明；而实现继承，就是派生类同时继承函数的接口和实现。**
+(1)接口继承（Interface Inheritance）
+    1. 定义：接口继承指的是派生类只继承基类的函数声明（即接口），而不继承具体的实现细节。这意味着派生类获得了调用这些函数的能力，但必须自己提供函数的具体实现。
+    2. 目的：主要用来表达类型之间的“is-a”关系，以及确保多态行为。它允许程序员设计出可以处理基类指针或引用，但执行派生类操作的代码，这是通过虚函数来实现的。
+    3. 示例：使用纯虚函数定义接口，强制派生类实现这些函数，但不提供具体行为。
+(2)实现继承（Implementation Inheritance）
+    1. 定义：实现继承不仅包括接口的继承，还包含了函数的具体实现。派生类不仅知道要调用哪些函数，还直接继承了这些函数的执行逻辑。
+    2. 目的：当希望派生类共享基类的实现或者基类提供的功能足够通用，无需在派生类中重新实现时，使用实现继承可以减少代码重复并提高代码复用。
+    3. 示例：基类提供了具体函数的实现，派生类可以直接使用这些实现，也可以选择覆盖（override）它们。
+
+2. 虚函数、纯虚函数、非虚函数。
+（1）虚函数：
+虚函数是指一个类中你希望重载的成员函数，当你用一个基类指针或引用指向一个继承类对象的时候，你调用一个虚函数，实际调用的是继承类的版本。——MSDN
+虚函数用来表现基类和派生类的成员函数之间的一种关系.
+虚函数的定义在基类中进行,在需要定义为虚函数的成员函数的声明前冠以关键字 virtual.
+基类中的某个成员函数被声明为虚函数后,此虚函数就可以在一个或多个派生类中被重新定义.
+在派生类中重新定义时,其函数原型,包括返回类型,函数名,参数个数,参数类型及参数的先后顺序,都必须与基类中的原型完全相同.
+虚函数是重载的一种表现形式,是一种动态的重载方式.
+（2）纯虚函数：
+纯虚函数在基类中没有定义，它们被初始化为0。
+任何用纯虚函数派生的类，都要自己提供该函数的具体实现。
+定义纯虚函数
+virtual void fun(void) = 0;
+（3）非虚函数：
+一般成员函数，无virtual关键字修饰。
+
+3. 将虚函数、纯虚函数和非虚函数的功能与接口继承与实现继承联系起来：
+（1）声明一个纯虚函数（pure virtual）的目的是为了让派生类只继承函数接口，也就是上面说的接口继承。
+纯虚函数一般是在不方便具体实现此函数的情况下使用。也就是说基类无法为继承类规定一个统一的缺省操作，但继承类又必须含有这个函数接口，并对其分别实现。但是，在C++中，我们是可以为纯虚函数提供定义的，只不过这种定义对继承类来说没有特定的意义。因为继承类仍然要根据各自需要实现函数。
+通俗说，纯虚函数就是要求其继承类必须含有该函数接口，并对其进行实现。是对继承类的一种接口实现要求，但并不提供缺省操作，各个继承类必须分别实现自己的操作。
+（2）声明非纯虚函数（impure virtual）的目的是让继承类继承该函数的接口和缺省实现。
+与纯虚函数唯一的不同就是其为继承类提供了缺省操作，继承类可以不实现自己的操作而采用基类提供的默认操作。
+（3）声明非虚函数（non-virtual）的目的是为了令继承类继承函数接口及一份强制性实现。
+相对于虚函数来说，非虚函数对继承类要求的更为严格，继承类不仅要继承函数接口，而且也要继承函数实现。也就是为继承类定义了一种行为。(因此，对于派生类绝对不要重新定义继承而来的非虚函数，可参见条款36)
+
+4. 理解：
+   1. 纯虚函数：主要用于定义接口，强制派生类实现特定的函数，使得基类成为一个接口规范。
+   2. 虚函数：设计接口时，预期将来会有多种实现方式，或者需要在运行时根据对象类型选择合适的函数实现。
+   3. 普通成员函数：适用于那些不需要在派生类中重写的行为，或不涉及基类和派生类之间动态转换的场景。
+
+**总结：**
 + 接口继承和实现继承不同，在public继承下，derived classes总是继承base的接口
 + pure virtual函数只具体指定接口继承
 + 简朴的（非纯）impure virtual函数具体指定接口继承以及缺省实现继承
 + non-virtual函数具体指定接口继承以及强制性的实现继承
+
+### 35 考虑 virtual 函数以外的其他选择
+1. **方法一，基于虚函数的方法**
+在人物角色的基类增加一个成员函数heathValue，返回一个整数，表示人物的健康程度，并将声明为virtual．
+```cpp
+class GameCharacter {
+public:
+    virtual int healthValue() const;
+    ...
+};
+```
+heathValue声明为虚函数，因而派生类可以重新定义它，从而获得达到不同的人物可能不同的方式计算他们的健康指数的要求．
+
+但是没有声明为纯函数，这表示会有个计算健康指数的缺省算法．
+
+2. **方法二，藉由Non-Virtual Interface手法实现Template Method模式 NVI**
+该设计是令客户通过public non-virtual成员函数间接调用private virtual函数，相当对virtual函数进行一层的包装，可以称为是virtual函数的外覆器(warpper).
+```cpp
+class GameCharacter {
+public:
+    int healthValue() const
+    {
+        ...
+        int retVal = doHealthValue();
+        ...
+        return retVal;
+    }
+    ...
+private:
+    virtual int doHealthValue() const
+    {
+        ...
+    }
+};
+```
+NVI手法的一个优点可以确保在一个virtual函数被调用之前设定好适当的场景，并在调用结束之后清理场景．
+
+"事前工作"可以包括锁定互斥器，制造运转日志记录项，验证class约束条件，验证函数先决条件等等．
+
+"事后工作"可以包括互斥器解除锁定，验证函数的事后条件，再次验证class约束条件等等．
+
+3. **方法三，藉由函数指针实现Strategy模式**
+每个人物的构造函数接受一个指针，指向一个健康计算函数，调用该函数进行实际计算．
+```cpp
+class GameCharacter;
+int defaultHealthCalc(const GameCharacter& gc);
+class GameCharacter {
+public:
+    typedef int (*HealthCalcFunc)(const GameCharacter&);
+    explicit GameCharacter(HealthCalcFunc hcf = defaultHealthCalc):healthFunc(hcf)
+    {}
+    int healthValue() const
+    {
+        return healthFunc(*this);
+    }
+    ...
+private:
+    HealthCalcFunc healthFunc;
+};
+```
+该方法的优点，同一人物类型之不同实体可以有不同的健康计算函数，只需要在构造实例时，传入不同的计算函数的指针．
+
+某已知人物之健康计算函数可在运动期变更，可以在GameCharacter里提供一个成员函数setHealthCalc，用来替换当前的健康指数计算函数．
+
+该方法的缺点，如果需要利用GameCharacter的non-public信息进行计算健康指数时，由于计算函数是non-member non-friend函数，将出现无法访问的问题．
+
+如果让计算函数访问成功，则需要降低GameCharacter的封装性．
+
+4. 方法四，藉由tr1::function完成Strategy模式
+
+不再使用函数指针，而是改用一个类型为tr1::function的对象．
+
+可以是函数指针，函数对象，或成员函数指针，只要其签名式兼容于需求端．
+```cpp
+class GameCharacter;
+int defaultHealthCalc(const GameCharacter& gc);
+class GameCharacter {
+public:
+    typedef    std::tr1::function<int (const GameCharacter&)> HealthCalcFunc;
+    explicit GameCharacter(HealthCalcFunc hcf = defaultHealthCalc):healthFunc(hcf)
+    {}
+    int healthValue() const
+    {
+        return healthFunc(*this);
+    }
+    ...
+private:
+    HealthCalcFunc healthFunc;
+};
+
+short calcHealth(const GameCharacter&);
+struct HealthCalculator {
+    int operator()(const GameCharacter&) const
+    {...}
+};
+class GameLevel {
+public:
+    float health(const GameCharacter&) const;
+    ...
+};
+class EvilBadGuy:public GameCharacter{
+...
+};
+EvilBadGuy ebg1(calcHealth);            //函数
+EvilBadGuy ebg2(HealthCalculator());    //函数对象
+GameLevel currentLevel;
+EvilBadGuy ebg3(std::tr1::bind(&GameLevel::health,currentLevel,_1);    //成员函数
+```
+优点，以tr1::function替换函数指针之后，可以允许客户在计算人物健康指数时使用任何兼容的可调用物。
+
+5. 方法五，古典的Strategy模式
+
+将健康计算函数做成一个分离的继承体系中的virtual成员函数．
+
+每个GameCharacter对象都内含一个指针，指向一个来自HealthCalcFunc继承体系的对象
+```cpp
+class GameCharacter;
+class HealthCalcFunc {
+public:
+    ...
+    virtual int calc(const GameCharacter& gc) const
+    {...}
+    ...
+};
+HealthCalcFunc defaultHealthCalc;
+class GameCharacter {
+public:
+    explicit GameCharacter(HealthCalcFunc* phcf = &defaultHealthCalc):pHealthFunc(phcf)
+    {}
+    int healthValue() const
+    {
+        return pHealthFunc->calc(*this);
+    }
+    ...
+private:
+    HealthCalcFunc* pHealthFunc;
+};
+```
+优点，只要为HealthCalcFunc继承体系添加一个派生类，就可以将一个既有的健康算法纳入使用。
+
+启发：针对具体的应用问题，需要认真分析其应用的特点，以及应用的后续扩展等问题，再从众多的方法，选取最合适的方法。
+
+不能先入为主的，随便的套用一个方法，这样可能会导致应用的后续扩展问题．总之，遇到问题，先想，再比较，最后确定方案。
+
+**总结：**:这一节表示当我们为了解决问题而寻找某个特定设计方法时，不妨考虑virtual函数的替代方案
++ 使用NVI手法，他是用public non-virtual成员函数包裹较低访问性（private和protected）的virtual函数
++ 将virtual函数替换成“函数指针成员变量”，这是strategy设计模式的一种表现形式
++ 以tr1::function成员变量替换virtual函数，因而允许使用任何可调用物（callable entity）搭配一个兼容与需求的签名式
++ 将继承体系内的virtual函数替换成另一个继承体系内的virtual函数
+
++ 将机能从成员函数移到class外部函数，带来的一个缺点是：非成员函数无法访问class的non-public成员
++ tr1::function对象就像一般函数指针，这样的对象可接纳“与给定之目标签名式兼容”的所有可调用物（callable entities）
+
+
+### 36 绝不重新定义继承而来的non-virtual函数
+```cpp
+class B{
+public:
+    void mf();
+}
+class D : public B{
+public:
+    void mf();
+};
+
+D x;
+
+B *pB = &x; pB->mf(); //调用B版本的mf
+D *pD = &x; pD->mf(); // 调用D版本的mf
+```
+即使不考虑这种代码层的差异，如果这样重定义的话，也不符合之前的“每一个D都是一个B”的定义\
+
+**总结：**
+- 绝对不要重新定义继承而来的non-virtual
+
+### 37 绝不重新定义继承而来的缺省参数值
+```cpp
+class Shape{
+public:
+    enum ShapeColor {Red, Green, Blue};
+    virtual void draw(ShapeColor color=Red)const = 0;
+};
+class Rectangle : public Shape{
+public:
+    virtual void draw(ShapeColor color=Green)const;//和父类的默认参数不同
+}
+Shape* pr = new Rectangle; // 注意此时pr的静态类型是Shape，但是他的动态类型是Rectangle
+pr->draw(); //virtual函数是动态绑定，而缺省参数值是静态绑定，所以会调用Red
+```
+
+解决方案之一就是NVI(non-virtual interface)条款35做法
+```cpp
+class Shape{
+public:
+    enum Color{RED,GREEN,BLUE};
+    void draw(Color color = RED) const{
+           ...
+           doDraw(color);
+           ...
+    }
+    ...
+private:
+   virtual void doDraw(Color color) const = 0;  
+};
+
+class Circle:public Shape{
+    ...
+private:
+    virtual void doDraw(Color color){ ... }
+};
+```
+由于draw是non-virtual而non-virtual绝对不会被重新改写(条款36),所以color的缺省值总是为RED。
+
+**总结：**
+- 绝对不要重新定义一个继承而来的缺省参数值，因为缺省参数值都是静态绑定，而virtual函数－你唯一应该覆写的东西－却是动态绑定。
+
+### 38 通过复合塑模出has-a或"根据某物实现出
+
+1. Is-a（继承）：使用public继承表达“是一个”关系，意味着派生类是基类的一种特殊形式，继承了基类的所有属性和行为。这种关系在UML中通常表示为泛化（Generalization）。
+
+2. Has-a（复合）：通过包含另一个类的对象作为成员变量来表达“有一个”关系，表明一个类拥有另一个类的实例，利用该实例来实现部分功能。这对应于UML中的聚合或组合（Aggregation/Composition）。
+
+3. 复合的优势：
+- 设计灵活性：复合允许在不修改现有类的情况下轻松添加或替换组件，从而提供更高的设计灵活性和可扩展性。
+- 降低耦合度：相比继承，复合降低了类之间的耦合，因为修改基类不会直接影响到使用复合的类，这有助于遵循开放/封闭原则。
+- 清晰的职责划分：通过明确哪些功能是由内部对象处理的，哪些是由包含它的类处理的，可以更清晰地定义类的职责。
+
+4. 根据某物实现出：
+- 这个表述强调了实现层面的关联，意味着一个类的实现是基于另一个类的功能，但并不意味着它是那个类的一个子类型。使用复合，一个类可以内部实现对另一个类的使用，从而“根据某物实现出”某些功能，而不是直接通过继承关系来表达这种功能的延伸。
+
+5. 何时使用复合：
+- 当两个类之间不存在明确的is-a关系，或者这种关系不是基于行为的自然延伸时。
+- 当你希望实现松耦合、易于维护和测试的设计时。
+- 当你想在不修改基类的前提下，能够自由地改变或扩展类的行为时。
+
+**总结：**
+- 复合的意义和public继承完全不同。
+- 在应用域，复合意味着has-a(有一个)。在实现域，复合意味着is-implemented-in-terms-of(根据某物实现出)。
+
+### 39 明智而审慎地使用private继承
+1. 某派生类private继承于基类之后：
+   1. 基类中的所有内容（不论是public、protected、private）在派生类中都是不可访问的
+   2. 不能再将派生类对象转换为基类对象
+   3. 基类仍然可以重写/隐藏基类的成员方法
+
+2. private继承意为implemented-terms-of（根据某物实现出）：
+假设你让class D以private继承于class B，用意为采用class B内的某些特性来实现class D，再无其他意义了
+借助条款34的属于：private继承意味只有实现部分（也就是基类中已经实现的函数）被继承，接口部分（基类中只定义还未实现的）应该被省去
+
+3. 与类的复合模式的关系：
+在条款38中介绍了类的复合（composition）模式，其中类的复合也有着“is-implemented-in-terms-of”的意义
+两者有着同样的意义，但是建议：尽可能使用复合，必要时才使用private继承
+何时才必要使用private呢？
+主要是当protected成员和/或virtual函数牵扯进来的时候。当派生类想要访问基类的protected成分或者基类想要重写一个或多个virtual函数
+还有一种情况，就是当空间方面的利害关系足以踢翻private继承的支柱时（下面介绍）
+
+4. EBO（空基类最优化）：在某些情况下，使用private继承可以利用空基类优化（Empty Base Optimization），使得派生类的大小不因为空基类的存在而增加。这对于设计轻量级对象特别有用。
+
+5. 替代复合：在考虑是否使用private继承时，应首先考虑是否可以使用复合（即包含一个对象作为成员变量）来达到相同的设计目标。复合通常更为简单且直接，减少了继承的复杂性。
+
+6. 特殊情况下的选择：尽管一般推荐使用复合，但在以下情况可能考虑private继承：
+    1. 需要访问或覆盖基类的受保护成员。
+    2. 基类中有虚函数，且派生类需要成为多态体系的一部分。
+    3. 希望利用EBO来避免空基类带来的空间开销。
+
+7. 审慎使用：由于private继承改变了基类成员的访问级别，并且可能引入额外的设计复杂度，因此应该在充分理解其后果后才使用，并且只有当复合或其他设计模式不适用或不足够时才考虑。
+
+**总结：**
++ private继承意为“is-implemented-in-terms-of（根据某物实现出）”。它通常比复合（composition）的级别低。但是当derived class需要访问protected base class的成员，或需要重新定义继承而来的virtual函数时，这么设计时合理的
++ 和复合（composition）不同，private继承可以造成empty base最优化。这对致力于“对象尺寸最小化”的程序库开发者而言，可能很重要
+
+### 40 明智而审慎地使用多重继承
+
+1. 复杂性增加：多重继承导致类的继承关系网更复杂，可能难以理解和维护。开发者需要清楚地了解每个基类的角色和责任，以及它们如何协同工作。
+
+2. 二义性问题：如果多个基类中存在同名成员（比如成员变量或函数），那么在派生类中直接访问这些成员时可能会引起二义性，需要使用作用域解析运算符（::）来明确指定来源。
+
+3. 菱形继承问题：当多个基类中存在共同的基类时，如果不使用虚拟继承（virtual inheritance），会导致基类的实例在派生类中有多个副本，即所谓的“菱形问题”。虚拟继承可以解决这个问题，但会引入额外的大小、速度和初始化开销。
+
+4. 设计考量：多重继承往往用于实现“混入”（Mix-in）特性，即向类添加特定功能而不改变其核心行为。在考虑使用多重继承前，应评估是否有其他更简单的设计模式（如复合、委托或策略模式）可以达到相同目的。
+
+5. 接口清晰性：多重继承可能导致派生类的接口变得模糊不清，因为客户端可能不清楚哪些行为来自于哪个基类，这会影响代码的可读性和可维护性。
+
+6. 使用原则：只有在确信多重继承能够带来显著的设计优势，并且其他替代方案不足以满足需求时，才应考虑使用。同时，应仔细规划继承结构，避免不必要的复杂性，并确保正确处理可能的二义性问题。
+
+7. virtual 继承的成本会较高：
+- 使用 virtual 继承的那些 classes 所产生的对象往往比使用 non-virtual 继承的体积要大；
+- 访问 virtual base classes 成员变量时，也比访问 non-virtual base classes 的成员变量速度慢；
+- virtual base classes 初始化由继承体系中的最低层（most derived）class 负责；
+
+8. 多重继承正当用途:“public继承某个Interface class” 和 “private 继承某个协助实现的class”的两相组合。
+
+**总结：**
++ 多重继承比单一继承复杂。它可可能导致新的歧义性，以及对virtual继承的需要。
++ virtual继承会增加大小、速度、初始化（及赋值）复杂度等等成本。如果virtual base classes不带任何数据，将是最具使用价值的情况。
++ 多重继承的确有正当用途。其中一个情节涉及“public继承某个Interface class”和“private继承某个协助实现的class”的两项组合。
