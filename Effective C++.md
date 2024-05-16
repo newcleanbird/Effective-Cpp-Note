@@ -1212,3 +1212,260 @@ private:
 + 多重继承比单一继承复杂。它可可能导致新的歧义性，以及对virtual继承的需要。
 + virtual继承会增加大小、速度、初始化（及赋值）复杂度等等成本。如果virtual base classes不带任何数据，将是最具使用价值的情况。
 + 多重继承的确有正当用途。其中一个情节涉及“public继承某个Interface class”和“private继承某个协助实现的class”的两项组合。
+
+## 第七章 模板与泛型编程
+### 41 了解隐式接口和编译期多态
+对于面向对象编程：以显式接口（explicit interfaces）和运行期多态（runtime polymorphism）解决问题：
+```cpp    
+    class Widget {
+    public:
+        Widget();
+        virtual ~Widget();
+        virtual std::size_t size() const;
+        void swap(Widget& other); //第25条
+    }
+    
+    void doProcessing(Widget& w){
+        if(w.size()>10){...}
+    }
+```
++ 在上面这段代码中，由于w的类型被声明为Widget，所以w必须支持Widget接口，我们可以在源码中找出这个接口，看看他是什么样子（explicit interface），也就是他在源码中清晰可见
++ 由于Widget的某些成员函数是virtual，w对于那些函数的调用将表现运行期多态，也就是运行期间根据w的动态类型决定调用哪一个函数
+
+在templete编程中：隐式接口（implicit interface）和编译器多态（compile-time polymorphism）更重要：
+```cpp
+    template<typename T>
+    void doProcessing(T& w)
+    {
+        if(w.size()>10){...}
+    }
+```
++ 在上面这段代码中，w必须支持哪一种接口，由template中执行于w身上的操作来决定，例如T必须支持size等函数。这叫做隐式接口
++ 凡涉及到w的任何函数调用，例如operator>，都有可能造成template具现化，使得调用成功，根据不同的T调用具现化出来不同的函数，这叫做编译期多态
+
+- 隐式接口：函数模板，类型不清楚，对我们来说接口是隐藏的。
+- 显示接口：我们常规的头文件接口声明就是显示接口，明确了返回值，参数。
+- 编译期多态：编译时实例化模板确定哪个重载函数被调用。
+- 运行期多态：运行时哪一个virtual函数该被绑定。
+
+**总结：**
+- class和template都支持接口和多态。
+- 对class而言接口是显示的。多态则是通过virtual函数发生于运行期。
+- 对template而言，接口是隐式的。多态则通过template实例化和函数重载解析，发生于编译器。
+
+### 42 了解typename的双重意义
+
+模版声明有两种形式：
+```cpp
+template<class T> class Widget;
+template<typename T> class Widget;
+```
+这里声明模版参数时，它们的意义完全相同。
+
+不过对于typename在模版中除了声明模版参数外还有几处特别的用处要注意！
+```cpp
+template<typename C>
+void print2nd(const C& container)
+{
+  C::const_iterator* x;
+  ...
+}
+```
+这里有个新名词要了解，嵌套从属类型：即属于模版类型C下的类型，形式：C::xxx。
+
+上面对应的就是C::const_iterator，这里是有歧义的，C::const_iterator是一个类型了还是一个变量了，如果作为类型上面就是定义一个指针x，如果作为变量就是乘x。对于这种嵌套从属类型，编译器一般默认当变量处理。如果要当类型处理就必须在其前面加关键字typename。
+```cpp
+typename C::const_iterator* x;  // 这样就显示告诉编译器，C::const_iterator是一个自定义类型
+```
+
+另外对于嵌套从属类型前面加typename，有两处特例不能加。即不能出现在基类和成员初始化列表的嵌套从属类型里(除此之外都要加)。
+
+```cpp
+template<typename T>
+class Derived : public Base<T>::Nested  // 不能加typename
+{
+ public:
+  	explicit Derived(int x) : Base<T>::Nested(x)  // 不能加typename
+    {
+       typename Base<T>::Nested temp;   // 这里要加
+    }
+}
+```
+
+**总结：**
+- 声明template参数时，前缀关键字class和typename可互换，意义一样。
+- 请使用关键字typename标识嵌套从属类型，但不得在基类或成员初始化列表内使用。
+
+### 43 注意处理模版化基类内的名称
+```cpp
+template<typename T>
+class LoggingMsgSender : public MsgSender<T>  // 模版化基类
+{
+ public:
+  	...
+    void sendClearMsg(const MsgInfo& info)
+    {
+      	...
+      	sendClear(info);  // 如果这个接口属于基类的，这里也不认识，因为基类是什么这时编译器不知道
+       	...
+    }
+}
+```
+像上面的sendClear接口模版化基类里是否存在，编译器是不确定的，所以这种编译会报错。有下面3种方式解决这种问题，就是明确告诉编译器假设它存在。
+
+1. 通过this->sendClear(info);调用，假设sendClear在this中。
+2. 调用前加using声明using MsgSender<T>::sendClear;，明确告诉编译器sendClear在模版基类中。
+3. 调用时明白指明，MsgSender<T>::sendClear(info);
+
+**总结：**
+- 可在派生类模版内通过this->指明基类模版的成员名称(1)，或者由一个明白写出的属于基类的修饰符完成(2, 3)。
+
+### 44 将与参数无关的代码抽离template
+**template是一个节省时间和避免代码重复的一个奇方妙法。**不再需要键入20个类似的class而每一个带有15个成员函数，你只需键入一个class template，留给编译器去实例化那20个你需要的相关class和300个函数。(它们只有在被使用时才会实例化)
+
+template虽然给我们提供了方便，但是注意如果使用不当，很容易导致代码膨胀(执行文件变大)。其结果有可能源码看起来合身而整齐，但目标码却不是那么回事。在template代码中，重复是隐藏的，所以你必须训练自己去感受当template被实例化多次时可能发生的重复。
+```cpp
+template<typename T, std::size_t n>  // 这里T称为模版的类型参数，n是非类型参数
+class SquareMatrix {
+public:
+  	...
+    void invert();
+}
+
+// 实例化
+SquareMatrix<double, 5> sm1;
+sml.invert();
+
+SquareMatrix<double, 10> sm2;
+sm2.invert();
+```
+上面这段模版封装，多次实例化，其中invert也会实例多份，虽然它们二进制实现一样。这就是隐晦的重复代码
+```cpp
+template<typename T>
+class SquareMatrixbase {
+protected:
+  	...
+    void invert(std::size_t matrixSize);
+  	...
+}
+
+template<typename T, std::size_t n>
+class SqureMatrix : public SquareMatrixbase<T> {
+private:
+  	using SquareMatrixBase<T>::invert;
+  	...
+public:
+  	...
+    void invert() {
+      	this->invert(n);
+    }
+}
+```
+把重复逻辑移到基类中，所有模版类共有，这样就减少了代码膨胀了。
+
+本条款想表达的是使用template时要注意多次实例化后可能带来的代码重复，要尽量避免这种重复代码。这就是我的理解。
+
+TODO: 翻译的请记住条款描述得有点抽象，没深刻理解～待日后回顾重新理解！
+
+**总结：**
+- template生成多个class和多个函数，所以任何template代码都不该与某个造成膨胀的template参数产生相依关系。
+- 因非类型模版参数而造成的代码膨胀，往往可消除，做法是以函数参数或class成员变量替换template参数。
+- 因类型参数而造成的代码膨胀，往往可以降低，做法是让带有完全相同二进制实现的代码共享，如放基类中。
+
+### 45 使用成员函数模版接受所有兼容类型
+本条款想要表达的是我们封装的模版所有操作行为要和普通类保持一致。即隐式行为要一致。如不同类型可隐式相互转换。
+```cpp
+template<typename T>
+class SmartPrt {
+ public:
+  	SmartPrt(const SmartPrt& other);  //正常的copy构造函数，取消编译器自动生成
+  
+  	template<typename U>   // 泛化的copy构造函数(成员函数模版)，接受不同类型对象转换
+  	SmartPrt(const SmartPrt<U>& other) : heldPtr(other.get())
+    {
+      	...
+    }
+  	T* get() const {return heldPtr;};
+  	...
+ private:
+  	T* heldPtr;
+}
+```
+不过注意泛化的成员函数(即成员函数模版)并不会影响编译器自动生成类默认函数规则。所以如果你要完全自定义类行为，默认产生的函数除了泛化版本，对应的正常化版本也要声明。
+**总结：**
+- 请使用成员函数模版生成可接受所有兼容类型的函数。
+- 如果你声明成员函数模版用于泛化copy构造函数或赋值操作符，你还是需要声明对应正常的copy构造函数和赋值操作符函数。
+
+### 46 需要类型转换时请为模版定义非成员函数
+对应条款24，这里只是模版实现。规则一致，但它们写法上有所区别了。
+```cpp
+template<typename T>
+class Rational {
+public:
+  	Rational(const T& numerator = 0,
+    				 const T& denominator = 1);
+  	const T numerator() const;
+  	const T denominator() const;
+  	...
+}
+
+// 需要隐式转换的接口定义为非成员函数
+template<typename T>
+const Rational<T> operator* (const Rational<T>& lhs,
+                             const Rational<T>& rhs)
+{...};
+
+// 使用
+Rational<int> oneHalf(1, 2);
+Rational<int> result = oneHalf * 2;  // 这里会编译错误，2不能隐式转换
+```
+上面只是把24条款示例改为模版实现，然而模版版本是编译不过的，因为编译器并不知道2要转换为什么。编译器推断不了模版的隐式转换。
+
+对于模版我们只能通过friend和inline特性来实现非成员函数的定义。
+```cpp
+template<typename T>
+class Rational {
+public:
+  	...
+    // 这里Rational是Rational<T>的简写形式，在类模版内部可以简写。
+    friend const Rational operator*(const Rational& lhs,
+                                   	const Rational& rhs)
+    {
+      	return Rational(lhs.numerator() * rhs.numerator(),
+                       	lhs.denominator() * rhs.denominator());
+    }
+}
+```
+这样就可以编译，连接通过了。
+
+**总结：**
+- 当我们编写一个class template，而它所提供的函数要支持隐式转换时，请将这些函数定义为class template内部的friend函数。
+
+### 47 请使用traits class表现类型信息
+
+1. 设计并实现一个traits class：
+    1. 确认若干你希望将来可取得的类型相关信息。例如对于迭代器，我们希望将来可取得其分类。
+    2. 为该信息选择一个名称（例如iterator_category）
+    3. 提供一个template和一组特化版本（例如稍早说的iterator_traits)，内含你希望支持的类型相关信息。
+2. 使用一个traits class：
+    1. 建立一组重载函数（身份像劳工）或函数模板，彼此间的差异只在于各自控制的traits参数。令每个函数的实现码与其接受的traits信息相应和。
+    2. 建立一个控制函数（身份像工头）或函数模板，它调用上述那些“劳工函数”并传递traits class的相关信息。
+    3. Traits class使得“类型相关信息”在编译期可用。它以template和“template 特化”完成实现。
+    4. 整合重载技术后，traits classes有可能在编译期对类型执行if…else测试。
+
+**总结：**
+- Traits class 使得类型相关信息在编译器可用。它们以template和template特化完成实现。
+- 整合重载技术后，traits class有可能在编译期对类型执行if…else测试。(重载是编译期确定，if是运行期确定)
+
+### 48 认识template元编程
+47条款的示例就是使用的模版元编程技术，它是一种把运行期的代码转移到编译期完成的技术。这种技术可能永远不会成为主流，但是如果你是一个程序库开发员，那这种技术就是家常便饭了。
+
+通过模版或重载技术，把如if这种运行期的判断转换为编译期重载函数自动匹配。
+
+它有两个特点：
+1. 它让某些事情更容易。如果没有它，那些事情将是困难的，甚至不可能的。
+2. 由于它将工作从运行期转移到编译期。这可更早发现错误，而且更高效、较小的可执行文件、较短的运行期、较少的内存需求。不过它会使编译时间变长。
+
+**总结：**
+- 模版元编程可将工作由运行期转移到编译期，因而得以实现早期错误发现和更高的执行效率。
+- 模版元编程可被用来生成客户定制代码，也可用来避免生成对某些特殊类型并不适合的代码。
