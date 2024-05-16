@@ -1469,3 +1469,111 @@ public:
 **总结：**
 - 模版元编程可将工作由运行期转移到编译期，因而得以实现早期错误发现和更高的执行效率。
 - 模版元编程可被用来生成客户定制代码，也可用来避免生成对某些特殊类型并不适合的代码。
+
+## 第八章 定制new和delete
+
+### 49 了解new-handler的行为
+
+当new无法申请到新的内存的时候，会不断的调用new-handler，直到找到足够的内存,new_handler是一个错误处理函数：
+```cpp
+    namespace std{
+        typedef void(*new_handler)();
+        new_handler set_new_handler(new_handler p) throw();
+    }
+```
+一个设计良好的new-handler要做下面的事情：
++ 让更多内存可以被使用
++ 安装另一个new-handler，如果目前这个new-handler无法取得更多可用内存，或许他知道另外哪个new-handler有这个能力，然后用那个new-handler替换自己
++ 卸除new-handler
++ 抛出bad_alloc的异常
++ 不返回，调用abort或者exit
+
+new-handler无法给每个class进行定制，但是可以重写new运算符，设计出自己的new-handler
+此时这个new应该类似于下面的实现方式：
+```cpp
+    void* Widget::operator new(std::size_t size) throw(std::bad_alloc){
+        NewHandlerHolder h(std::set_new_handler(currentHandler));      // 安装Widget的new-handler
+        return ::operator new(size);                                   //分配内存或者抛出异常，恢复global new-handler
+    }
+```
+
+**总结：**
+- set_new_handler允许客户指定一个函数，在内存分配无法获得满足时被调用。
+- 让new不抛异常是一个颇为局限的工具，因为它只是保证了内存分配时不抛异常，后续调用构造函数还是可能抛出异常。=> new做了两件事：1. 分配内存 2. 调用类的构造函数。
+
+### 50 了解new和delete的合理替换时机
+
++ 用来检测运用上的错误，如果new的内存delete的时候失败掉了就会导致内存泄漏，定制的时候可以进行检测和定位对应的失败位置
++ 为了强化效率（传统的new是为了适应各种不同需求而制作的，所以效率上就很中庸）
++ 可以收集使用上的统计数据
++ 为了增加分配和归还内存的速度
++ 为了降低缺省内存管理器带来的空间额外开销
++ 为了弥补缺省分配器中的非最佳对齐位
++ 为了将相关对象成簇集中起来
+
+但是要自定义一个合适的new/delete并非易事，如内存对齐(对齐指令执行效率最高)，可移植性、线程安全…等等细节。所以我的建议是在你确定要自定义new/delete之前，请先确定你程序瓶颈是否真的由默认new/delete引起，而且现在也有商业产品可以替代编译器自带的内存管理器。或者也有一些开源的产品可以使用，如Boost的Pool就是对于常见的分配大量小型对象很有帮助。
+
+**总结：**
+- 有许多理由需要写个自定的new和delete，包括改善性能，对heap运用错误进行调试，收集heap使用信息。
+
+### 51 编写 new和 delete 时需固守常规
+
++ 重写new的时候要保证49条的情况，要能够处理0bytes内存申请等所有意外情况
++ 重写delete的时候，要保证删除null指针永远是安全的
+
+**总结：**
+operator new 1. 应该内含一个无限循环，并在其中尝试分配内存，如果它无法满足内存需求，就该调用new-handler。2. 它也应该有能力处理0字节申请。3. Class的专属版本则还应该处理“比正确大小更大的申请”(被继承后, new 派生对象，这时可以走编译器默认new操作)。
+operator delete应该在收到null指针时不做任何事情。Class专属版本还应该处理“比正确大小更大的申请”(同上)。
+
+### 52 写了placement new也要写placement delete
+
+如果operator new接受的参数除了一定会有的size_t之外还有其他的参数，这个就是所谓的palcement new
+```cpp
+void* operator new(std::size_t, void* pMemory) throw(); //placement new
+static void operator delete(void* pMemory) throw();     //palcement delete，此时要注意名称遮掩问题
+```
+
+**总结：**
++ 当你写一个operator new, 请确定也写出了对应的operator delete。如果没有这样做，你的程序可能会发生隐晦而时断时续的内存泄漏。
++ 当你声明new和delete，请确定不要无意识地(非故意)遮掩了它们的正常版本。
+
+
+## 第九章 杂项讨论
+### 53 不要轻忽编译器的警告
+
+**总结：**
++ 严肃对待编译器发出的warning， 努力在编译器最高警告级别下无warning
++ 同时不要过度依赖编译器的警告，因为不同的编译器对待事情的态度可能并不相同，换一个编译器警告信息可能就没有了
+
+### 54. 让自己熟悉包括TR1在内的标准程序库
+
+TR1是C++标准程序库第一次扩充，包含14个新组件，统统都放在std::tr1命名空间下。
+
+1. 智能指针tr1::shared_ptr和tr1::weak_ptr。
+2. tr1::function，可表示任何函数，是一个模板。在条款35中有使用。
+3. tr1::bind，同样35示范中有它用法。
+4. hash table，用来实现set, multiset, map和multi-map容器的hash版本。
+5. 正则表达式。
+6. tr1::tuple，标准库中的pair template的新一代制品，可持有任意个数的对象(pair只能持有两个对象)。
+7. tr1::array，是一个STL化的数组。
+8. tr1::mem_fn，生成指向成员的指针的包装对象。
+9. tr1::reference_wrapper, 一个让引用的行为更像对象的设施。
+10. 随机数生成工具。
+11. 数学特殊函数。
+12. C99兼容扩充。
+13. Type traits，见条款47。
+14. tr1::result_of，这是一个模板，用来推导函数调用的返回类型。
+
+**总结：**
+- C++标准程序库的主要功能由STL、iostreams、locales组成。并包含C99标准程序库。
+- TR1添加了智能指针、一般化函数指针、hash-based容器、正则表达式以及另外10个组件的支持。
+- TR1自身只是一份规范。为获得TR1提供的好处，你需要一份实现。一个好的实现来源是Boost。
+
+### 55 让自己熟悉Boost
+
+你正在寻找一个高质量、源码开放、平台独立、编译器独立的程序库吗？看看Boost吧。有兴趣加入一个由雄心勃勃充满才干的C++开发人员组成的社群，致力发展当前最高技术水平的程序库吗？看看Boost吧！想要一瞥未来的C++可能长相吗？看看Boost吧！
+
+![Boost官网](https://www.boost.org/)
+**总结：**
+- Boost是一个社群，也是一个网站。致力于免费、源码开放、同僚复审的C++程序库开发。Boost在C++标准化过程中扮演深具影响力的角色。
+- Boost提供了许多TR1组件的实现，以及其他许多程序库。
