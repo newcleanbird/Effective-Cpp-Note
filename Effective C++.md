@@ -1,4 +1,7 @@
 # Effective C++
+
+Effective C++在线地址： https://wizardforcel.gitbooks.io/effective-cpp/content/index.html
+
 ## 第一章 让自己习惯C++
 ### 01 视C++为一个语言联邦
 1. C++是个多重范型编程语言：
